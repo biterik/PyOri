@@ -1,0 +1,650 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Grain Boundary Misorientation Analysis: Educational Tutorial\n",
+    "\n",
+    "This notebook provides a step-by-step walkthrough of grain boundary misorientation calculations using quaternions and crystal symmetry.\n",
+    "\n",
+    "## Learning Objectives\n",
+    "\n",
+    "1. Understand quaternion representation of crystal orientations\n",
+    "2. See how cubic symmetry operations work\n",
+    "3. Learn the disorientation calculation process\n",
+    "4. Identify CSL (Coincidence Site Lattice) boundaries\n",
+    "5. Visualize the fundamental zone concept\n",
+    "\n",
+    "---"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Setup: Import required modules\n",
+    "import sys\n",
+    "from pathlib import Path\n",
+    "import numpy as np\n",
+    "\n",
+    "# Add src to path\n",
+    "src_path = Path.cwd().parent / 'src'\n",
+    "sys.path.insert(0, str(src_path))\n",
+    "\n",
+    "from quaternions import Quaternion, euler_to_quaternion, axis_angle_to_quaternion, quaternion_to_euler\n",
+    "from symmetry import CubicSymmetry\n",
+    "from csl import CSLIdentifier\n",
+    "from misorientation import analyze_axis_angle, analyze_euler_angles\n",
+    "\n",
+    "print(\"✓ Modules loaded successfully\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 1: Understanding Quaternions\n",
+    "\n",
+    "Quaternions are 4-component objects: q = [q₁, q₂, q₃, q₄]\n",
+    "\n",
+    "For **unit quaternions** (representing rotations):\n",
+    "- q₁² + q₂² + q₃² + q₄² = 1\n",
+    "- They represent rotations without singularities\n",
+    "- The axis-angle relationship: q = [n·sin(θ/2), cos(θ/2)] where n is the rotation axis\n",
+    "\n",
+    "### Example 1: Creating Quaternions from Axis-Angle"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Create a 90° rotation around the z-axis [0,0,1]\n",
+    "angle = 90.0  # degrees\n",
+    "axis = [0, 0, 1]\n",
+    "\n",
+    "q = axis_angle_to_quaternion(angle, axis, degrees=True)\n",
+    "\n",
+    "print(f\"Rotation: {angle}° around {axis}\")\n",
+    "print(f\"Quaternion: q = [{q.q[0]:.4f}, {q.q[1]:.4f}, {q.q[2]:.4f}, {q.q[3]:.4f}]\")\n",
+    "print(f\"\\nVerification:\")\n",
+    "print(f\"  Norm = {np.linalg.norm(q.q):.6f} (should be 1.0)\")\n",
+    "\n",
+    "# Convert back to axis-angle\n",
+    "angle_back, axis_back = q.to_axis_angle()\n",
+    "print(f\"\\nConverted back:\")\n",
+    "print(f\"  Angle: {angle_back:.2f}°\")\n",
+    "print(f\"  Axis: [{axis_back[0]:.4f}, {axis_back[1]:.4f}, {axis_back[2]:.4f}]\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Example 2: Creating Quaternions from Euler Angles\n",
+    "\n",
+    "Euler angles (Bunge convention): φ₁, Φ, φ₂\n",
+    "- φ₁: Rotation about Z-axis\n",
+    "- Φ: Rotation about new X-axis\n",
+    "- φ₂: Rotation about new Z-axis"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Euler angles (Bunge convention)\n",
+    "phi1, phi, phi2 = 45.0, 90.0, 30.0\n",
+    "\n",
+    "q_euler = euler_to_quaternion(phi1, phi, phi2, degrees=True)\n",
+    "\n",
+    "print(f\"Euler angles: φ₁={phi1}°, Φ={phi}°, φ₂={phi2}°\")\n",
+    "print(f\"Quaternion: q = [{q_euler.q[0]:.4f}, {q_euler.q[1]:.4f}, {q_euler.q[2]:.4f}, {q_euler.q[3]:.4f}]\")\n",
+    "\n",
+    "# Convert to axis-angle\n",
+    "angle_equiv, axis_equiv = q_euler.to_axis_angle()\n",
+    "print(f\"\\nEquivalent axis-angle:\")\n",
+    "print(f\"  Angle: {angle_equiv:.2f}°\")\n",
+    "print(f\"  Axis: [{axis_equiv[0]:.4f}, {axis_equiv[1]:.4f}, {axis_equiv[2]:.4f}]\")\n",
+    "\n",
+    "# Convert back to Euler angles\n",
+    "phi1_back, phi_back, phi2_back = quaternion_to_euler(q_euler)\n",
+    "print(f\"\\nConverted back to Euler:\")\n",
+    "print(f\"  φ₁={phi1_back:.2f}°, Φ={phi_back:.2f}°, φ₂={phi2_back:.2f}°\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 2: Cubic Crystal Symmetry\n",
+    "\n",
+    "Cubic crystals have **24 proper rotation symmetries**:\n",
+    "- 1 identity (0° rotation)\n",
+    "- 6 face rotations (90°, 180°, 270° around <100>)\n",
+    "- 8 body diagonal rotations (120°, 240° around <111>)\n",
+    "- 9 edge rotations (180° around <110>)\n",
+    "\n",
+    "Let's examine all 24 symmetry operators:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load cubic symmetry operators\n",
+    "symm = CubicSymmetry()\n",
+    "\n",
+    "print(f\"Total symmetry operators: {symm.num_symm}\\n\")\n",
+    "print(f\"{'Index':<6} {'q1':<8} {'q2':<8} {'q3':<8} {'q4':<8} {'Angle':<8} {'Axis'}\")\n",
+    "print(\"-\" * 70)\n",
+    "\n",
+    "for i, op in enumerate(symm.operators):\n",
+    "    angle, axis = op.to_axis_angle()\n",
+    "    print(f\"{i:<6} {op.q[0]:>7.4f} {op.q[1]:>7.4f} {op.q[2]:>7.4f} {op.q[3]:>7.4f} \"\n",
+    "          f\"{angle:>7.1f}° [{axis[0]:>5.2f},{axis[1]:>5.2f},{axis[2]:>5.2f}]\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Applying Symmetry Operations\n",
+    "\n",
+    "Let's see what happens when we apply different symmetry operators to an orientation:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Start with a simple orientation: 30° around [1,0,0]\n",
+    "q_test = axis_angle_to_quaternion(30.0, [1, 0, 0])\n",
+    "\n",
+    "print(f\"Original orientation: 30° around [1,0,0]\")\n",
+    "print(f\"Quaternion: [{q_test.q[0]:.4f}, {q_test.q[1]:.4f}, {q_test.q[2]:.4f}, {q_test.q[3]:.4f}]\\n\")\n",
+    "\n",
+    "print(f\"Applying first 5 symmetry operations:\\n\")\n",
+    "print(f\"{'Symm':<6} {'Result Quaternion':<40} {'Angle':<8} {'Axis'}\")\n",
+    "print(\"-\" * 80)\n",
+    "\n",
+    "for i in range(5):\n",
+    "    q_result = symm.apply_pre_symmetry(q_test, i)\n",
+    "    angle, axis = q_result.to_axis_angle()\n",
+    "    print(f\"{i:<6} [{q_result.q[0]:>6.3f},{q_result.q[1]:>6.3f},{q_result.q[2]:>6.3f},{q_result.q[3]:>6.3f}] \"\n",
+    "          f\"{angle:>7.1f}° [{axis[0]:>5.2f},{axis[1]:>5.2f},{axis[2]:>5.2f}]\")\n",
+    "\n",
+    "print(\"\\n→ Different symmetry operators produce symmetrically equivalent orientations\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 3: Calculating Misorientation\n",
+    "\n",
+    "**Misorientation** between two grains: Q_mis = Q₁ · Q₂⁻¹\n",
+    "\n",
+    "Let's calculate the misorientation between two grains step by step:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Define two grain orientations\n",
+    "q1 = axis_angle_to_quaternion(0, [1, 0, 0])      # Grain 1: identity (reference)\n",
+    "q2 = axis_angle_to_quaternion(60, [1, 1, 1])    # Grain 2: 60° around [111]\n",
+    "\n",
+    "print(\"Grain 1 (reference):\")\n",
+    "print(f\"  Quaternion: [{q1.q[0]:.4f}, {q1.q[1]:.4f}, {q1.q[2]:.4f}, {q1.q[3]:.4f}]\")\n",
+    "\n",
+    "print(\"\\nGrain 2:\")\n",
+    "print(f\"  Input: 60° around [1,1,1]\")\n",
+    "print(f\"  Quaternion: [{q2.q[0]:.4f}, {q2.q[1]:.4f}, {q2.q[2]:.4f}, {q2.q[3]:.4f}]\")\n",
+    "\n",
+    "# Calculate misorientation Q1 * Q2^-1\n",
+    "q_mis = q1.misorientation(q2)\n",
+    "\n",
+    "print(\"\\nMisorientation (Q₁ · Q₂⁻¹):\")\n",
+    "print(f\"  Quaternion: [{q_mis.q[0]:.4f}, {q_mis.q[1]:.4f}, {q_mis.q[2]:.4f}, {q_mis.q[3]:.4f}]\")\n",
+    "\n",
+    "angle_mis, axis_mis = q_mis.to_axis_angle()\n",
+    "print(f\"  Angle: {angle_mis:.2f}°\")\n",
+    "print(f\"  Axis: [{axis_mis[0]:.4f}, {axis_mis[1]:.4f}, {axis_mis[2]:.4f}]\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 4: Finding the Disorientation\n",
+    "\n",
+    "**Disorientation** = Minimum angle representation after applying all symmetry operations\n",
+    "\n",
+    "We need to check 24 × 24 = **576 combinations** of symmetry operators to find the smallest angle!\n",
+    "\n",
+    "### The Fundamental Zone\n",
+    "\n",
+    "For cubic crystals, the disorientation must satisfy: **0 ≤ q₁ ≤ q₂ ≤ q₃ ≤ q₄**\n",
+    "\n",
+    "Let's search through all combinations:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Continue with the misorientation from above\n",
+    "print(\"Searching through all 576 symmetry combinations...\\n\")\n",
+    "\n",
+    "# Track the search process\n",
+    "candidates = []\n",
+    "qmax = 0.0\n",
+    "\n",
+    "for i in range(24):\n",
+    "    quint = symm.apply_pre_symmetry(q_mis, i)\n",
+    "    \n",
+    "    for j in range(24):\n",
+    "        quintn = symm.apply_post_symmetry(quint, j)\n",
+    "        \n",
+    "        # Try both positive and negative\n",
+    "        for neg_all in [False, True]:\n",
+    "            qqn = Quaternion(-quintn.q) if neg_all else quintn\n",
+    "            \n",
+    "            for neg_q4 in [False, True]:\n",
+    "                qresult = qqn.q.copy()\n",
+    "                if neg_q4:\n",
+    "                    qresult[3] = -qqn.q[3]\n",
+    "                \n",
+    "                # Check fundamental zone: 0 ≤ q1 ≤ q2 ≤ q3 ≤ q4\n",
+    "                if (qresult[0] >= 0.0 and \n",
+    "                    qresult[0] <= qresult[1] and\n",
+    "                    qresult[1] <= qresult[2] and\n",
+    "                    qresult[2] <= qresult[3]):\n",
+    "                    \n",
+    "                    candidates.append({\n",
+    "                        'i': i, 'j': j,\n",
+    "                        'q': qresult.copy(),\n",
+    "                        'q4': qresult[3]\n",
+    "                    })\n",
+    "                    \n",
+    "                    if qresult[3] > qmax:\n",
+    "                        qmax = qresult[3]\n",
+    "\n",
+    "print(f\"Found {len(candidates)} valid candidates in fundamental zone\")\n",
+    "print(f\"\\nTop 10 candidates (sorted by q₄, largest angle → smallest):\")\n",
+    "print(f\"\\n{'Symm(i,j)':<12} {'Quaternion [q1, q2, q3, q4]':<45} {'Angle'}\")\n",
+    "print(\"-\" * 75)\n",
+    "\n",
+    "# Sort by q4 (descending) and show top 10\n",
+    "candidates_sorted = sorted(candidates, key=lambda x: x['q4'], reverse=True)\n",
+    "for k, c in enumerate(candidates_sorted[:10]):\n",
+    "    q_temp = Quaternion(c['q'])\n",
+    "    angle_temp, _ = q_temp.to_axis_angle()\n",
+    "    print(f\"({c['i']:>2},{c['j']:>2})      \"\n",
+    "          f\"[{c['q'][0]:>6.3f}, {c['q'][1]:>6.3f}, {c['q'][2]:>6.3f}, {c['q'][3]:>6.3f}]  \"\n",
+    "          f\"{angle_temp:>6.2f}°\")\n",
+    "\n",
+    "print(f\"\\n→ The winner (smallest angle) is at the top!\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Final Disorientation Result"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Use the built-in function to get the disorientation\n",
+    "disor, idx1, idx2, neg_q4, neg_all = symm.find_disorientation(q_mis)\n",
+    "\n",
+    "angle_disor, axis_disor = disor.to_axis_angle()\n",
+    "\n",
+    "print(\"DISORIENTATION RESULT\")\n",
+    "print(\"=\" * 60)\n",
+    "print(f\"Quaternion: [{disor.q[0]:.4f}, {disor.q[1]:.4f}, {disor.q[2]:.4f}, {disor.q[3]:.4f}]\")\n",
+    "print(f\"Angle: {angle_disor:.2f}°\")\n",
+    "print(f\"Axis: [{axis_disor[0]:.4f}, {axis_disor[1]:.4f}, {axis_disor[2]:.4f}]\")\n",
+    "print(f\"\\nSymmetry operators used: ({idx1}, {idx2})\")\n",
+    "print(f\"Negations applied: q4={neg_q4}, all={neg_all}\")\n",
+    "print(\"\\n→ This is the MINIMUM angle representation in the fundamental zone\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 5: CSL Boundary Identification\n",
+    "\n",
+    "**CSL (Coincidence Site Lattice)** boundaries are special orientations where a fraction of lattice sites coincide.\n",
+    "\n",
+    "**Σ value** = reciprocal density of coincident sites (lower Σ → more special)\n",
+    "\n",
+    "**Brandon criterion**: Δθ_max = 15° / √Σ (allowable deviation from exact CSL)\n",
+    "\n",
+    "### Example: Famous Σ3 Twin Boundary"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# The famous 60° [111] twin boundary\n",
+    "csl = CSLIdentifier()\n",
+    "\n",
+    "# Identify based on our disorientation\n",
+    "sigma, deviation = csl.identify_boundary(disor, angle_disor)\n",
+    "\n",
+    "print(\"CSL IDENTIFICATION\")\n",
+    "print(\"=\" * 60)\n",
+    "print(f\"Disorientation: {angle_disor:.2f}° around [{axis_disor[0]:.3f}, {axis_disor[1]:.3f}, {axis_disor[2]:.3f}]\")\n",
+    "print(f\"\\nIdentified as: Σ{sigma}\")\n",
+    "print(f\"Deviation: {deviation:.3f}\")\n",
+    "\n",
+    "if sigma:\n",
+    "    brandon = csl.brandon_criterion(sigma)\n",
+    "    print(f\"Brandon criterion for Σ{sigma}: ±{brandon:.2f}°\")\n",
+    "    \n",
+    "    if deviation < 1.0:\n",
+    "        print(f\"\\n✓ TRUE CSL boundary (within Brandon criterion)\")\n",
+    "    else:\n",
+    "        print(f\"\\n⚠ Near-CSL (outside Brandon criterion)\")\n",
+    "\n",
+    "print(\"\\n\" + \"=\" * 60)\n",
+    "print(\"This is the famous coherent twin boundary!\")\n",
+    "print(\"One of the most common and important special boundaries.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### All Available CSL Boundaries\n",
+    "\n",
+    "Let's see what CSL boundaries are in the database:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(f\"Available CSL boundaries (Σ3 to Σ35):\\n\")\n",
+    "print(f\"{'Σ':<4} {'Angle':<8} {'Axis':<10} {'Brandon':<10} {'Quaternion'}\")\n",
+    "print(\"-\" * 70)\n",
+    "\n",
+    "for csl_boundary in csl.boundaries:\n",
+    "    brandon = csl.brandon_criterion(csl_boundary.sigma)\n",
+    "    uvw_str = f\"[{csl_boundary.uvw[0]}{csl_boundary.uvw[1]}{csl_boundary.uvw[2]}]\"\n",
+    "    q = csl_boundary.quaternion.q\n",
+    "    \n",
+    "    print(f\"{csl_boundary.sigma:<4} {csl_boundary.theta:<8.1f} {uvw_str:<10} \"\n",
+    "          f\"±{brandon:<8.2f} [{q[0]:.3f},{q[1]:.3f},{q[2]:.3f},{q[3]:.3f}]\")\n",
+    "\n",
+    "print(f\"\\nTotal: {len(csl.boundaries)} CSL boundary types\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 6: Complete Analysis Examples\n",
+    "\n",
+    "Now let's use the high-level API to analyze several famous boundaries:\n",
+    "\n",
+    "### Test Case 1: Σ3 Twin (60° [111])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gb1 = analyze_axis_angle(60.0, [1, 1, 1])\n",
+    "\n",
+    "print(\"=\"*70)\n",
+    "print(\"TEST CASE 1: Σ3 TWIN BOUNDARY\")\n",
+    "print(\"=\"*70)\n",
+    "print(f\"Input: 60° around [1,1,1]\")\n",
+    "print(f\"\\nResults:\")\n",
+    "print(f\"  Disorientation angle: {gb1.angle:.2f}°\")\n",
+    "print(f\"  Axis: [{gb1.axis[0]:.4f}, {gb1.axis[1]:.4f}, {gb1.axis[2]:.4f}]\")\n",
+    "print(f\"  Quaternion: [{gb1.disorientation.q[0]:.4f}, {gb1.disorientation.q[1]:.4f}, \"\n",
+    "      f\"{gb1.disorientation.q[2]:.4f}, {gb1.disorientation.q[3]:.4f}]\")\n",
+    "print(f\"  Σ value: {gb1.sigma}\")\n",
+    "print(f\"  Deviation: {gb1.deviation:.3f}\")\n",
+    "print(f\"  Classification: {gb1._classify_boundary()}\")\n",
+    "print(f\"\\n→ This is the most common twin boundary in FCC metals!\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Test Case 2: Σ5 Boundary (36.9° [100])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gb2 = analyze_axis_angle(36.9, [1, 0, 0])\n",
+    "\n",
+    "print(\"=\"*70)\n",
+    "print(\"TEST CASE 2: Σ5 BOUNDARY\")\n",
+    "print(\"=\"*70)\n",
+    "print(f\"Input: 36.9° around [1,0,0]\")\n",
+    "print(f\"\\nResults:\")\n",
+    "print(f\"  Disorientation angle: {gb2.angle:.2f}°\")\n",
+    "print(f\"  Axis: [{gb2.axis[0]:.4f}, {gb2.axis[1]:.4f}, {gb2.axis[2]:.4f}]\")\n",
+    "print(f\"  Σ value: {gb2.sigma}\")\n",
+    "print(f\"  Deviation: {gb2.deviation:.3f}\")\n",
+    "print(f\"  Classification: {gb2._classify_boundary()}\")\n",
+    "print(f\"\\n→ Common in annealed copper and other FCC metals\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Test Case 3: Low-Angle Boundary"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gb3 = analyze_axis_angle(5.0, [1, 0, 0])\n",
+    "\n",
+    "print(\"=\"*70)\n",
+    "print(\"TEST CASE 3: LOW-ANGLE BOUNDARY\")\n",
+    "print(\"=\"*70)\n",
+    "print(f\"Input: 5.0° around [1,0,0]\")\n",
+    "print(f\"\\nResults:\")\n",
+    "print(f\"  Disorientation angle: {gb3.angle:.2f}°\")\n",
+    "print(f\"  Axis: [{gb3.axis[0]:.4f}, {gb3.axis[1]:.4f}, {gb3.axis[2]:.4f}]\")\n",
+    "print(f\"  Σ value: {gb3.sigma}\")\n",
+    "print(f\"  Classification: {gb3._classify_boundary()}\")\n",
+    "print(f\"\\n→ Low-angle boundaries (θ < 15°) are treated as Σ1\")\n",
+    "print(f\"→ They consist of arrays of dislocations\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Test Case 4: General High-Angle Boundary"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gb4 = analyze_axis_angle(42.5, [1, 2, 3])\n",
+    "\n",
+    "print(\"=\"*70)\n",
+    "print(\"TEST CASE 4: GENERAL HIGH-ANGLE BOUNDARY\")\n",
+    "print(\"=\"*70)\n",
+    "print(f\"Input: 42.5° around [1,2,3]\")\n",
+    "print(f\"\\nResults:\")\n",
+    "print(f\"  Disorientation angle: {gb4.angle:.2f}°\")\n",
+    "print(f\"  Axis: [{gb4.axis[0]:.4f}, {gb4.axis[1]:.4f}, {gb4.axis[2]:.4f}]\")\n",
+    "print(f\"  Σ value: {gb4.sigma}\")\n",
+    "print(f\"  Deviation: {gb4.deviation:.3f}\" if gb4.sigma else \"  N/A\")\n",
+    "print(f\"  Classification: {gb4._classify_boundary()}\")\n",
+    "print(f\"\\n→ Random orientations typically don't match CSL boundaries\")\n",
+    "print(f\"→ If Σ is assigned, check if deviation < 1.0 (within Brandon)\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Part 7: Euler Angle Input\n",
+    "\n",
+    "In real experiments, orientations are often measured as Euler angles from EBSD.\n",
+    "\n",
+    "Let's analyze a boundary from two Euler angle measurements:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Two hypothetical grains from EBSD measurement\n",
+    "phi1_a, phi_a, phi2_a = 0.0, 0.0, 0.0      # Grain A (reference)\n",
+    "phi1_b, phi_b, phi2_b = 45.0, 90.0, 45.0   # Grain B\n",
+    "\n",
+    "gb_euler = analyze_euler_angles(phi1_a, phi_a, phi2_a, phi1_b, phi_b, phi2_b)\n",
+    "\n",
+    "print(\"=\"*70)\n",
+    "print(\"ANALYSIS FROM EULER ANGLES\")\n",
+    "print(\"=\"*70)\n",
+    "print(f\"Grain A: φ₁={phi1_a}°, Φ={phi_a}°, φ₂={phi2_a}°\")\n",
+    "print(f\"Grain B: φ₁={phi1_b}°, Φ={phi_b}°, φ₂={phi2_b}°\")\n",
+    "print(f\"\\nResults:\")\n",
+    "print(f\"  Disorientation angle: {gb_euler.angle:.2f}°\")\n",
+    "print(f\"  Axis: [{gb_euler.axis[0]:.4f}, {gb_euler.axis[1]:.4f}, {gb_euler.axis[2]:.4f}]\")\n",
+    "print(f\"  Quaternion: [{gb_euler.disorientation.q[0]:.4f}, {gb_euler.disorientation.q[1]:.4f}, \"\n",
+    "      f\"{gb_euler.disorientation.q[2]:.4f}, {gb_euler.disorientation.q[3]:.4f}]\")\n",
+    "print(f\"  Σ value: {gb_euler.sigma}\")\n",
+    "print(f\"  Deviation: {gb_euler.deviation:.3f}\")\n",
+    "print(f\"  Classification: {gb_euler._classify_boundary()}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Summary: Key Concepts\n",
+    "\n",
+    "### What We Learned:\n",
+    "\n",
+    "1. **Quaternions** provide a singularity-free way to represent rotations\n",
+    "   - 4 components: [q₁, q₂, q₃, q₄]\n",
+    "   - Relationship to axis-angle: q = [n·sin(θ/2), cos(θ/2)]\n",
+    "\n",
+    "2. **Cubic Symmetry** has 24 proper rotations\n",
+    "   - Must check all 24×24 = 576 combinations\n",
+    "   - Goal: find minimum angle representation\n",
+    "\n",
+    "3. **Fundamental Zone** for cubic crystals:\n",
+    "   - Constraint: 0 ≤ q₁ ≤ q₂ ≤ q₃ ≤ q₄\n",
+    "   - Ensures unique representation\n",
+    "\n",
+    "4. **CSL Boundaries** are special misorientations:\n",
+    "   - Σ3 (60°/[111]): coherent twin\n",
+    "   - Σ5 (36.9°/[100]): common in FCC\n",
+    "   - Brandon criterion: Δθ_max = 15°/√Σ\n",
+    "\n",
+    "5. **Classification**:\n",
+    "   - Low-angle (θ < 15°): Σ1, dislocation arrays\n",
+    "   - CSL (deviation < 1.0): special boundaries\n",
+    "   - General: random high-angle\n",
+    "\n",
+    "### Practical Applications:\n",
+    "\n",
+    "- **Materials characterization**: EBSD texture analysis\n",
+    "- **Grain boundary engineering**: Optimize properties\n",
+    "- **Recrystallization studies**: Track orientation changes\n",
+    "- **Interface modeling**: Predict boundary properties\n",
+    "\n",
+    "---\n",
+    "\n",
+    "## Exercises\n",
+    "\n",
+    "Try these on your own:\n",
+    "\n",
+    "1. Calculate the disorientation for Σ7 boundary: 38.2° around [111]\n",
+    "2. Find a general boundary and verify it's not CSL\n",
+    "3. Input your own EBSD data as Euler angles\n",
+    "4. Compare results with experimental grain boundary energy data\n",
+    "\n",
+    "---"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

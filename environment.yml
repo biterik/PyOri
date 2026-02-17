@@ -1,0 +1,10 @@
+name: pyori
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8
+  - numpy>=1.20.0
+  - pip
+  - pip:
+    - pytest>=7.0.0  # For testing (optional)
