@@ -1,21 +1,21 @@
 # biterik/PyOri — repo vitals
 
 ![stars](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbiterik%2FPyOri%2Fvitals%2Fbadge%2Fstars.json) ![views/week](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbiterik%2FPyOri%2Fvitals%2Fbadge%2Fviews-week.json) 
-_Updated 2026-10-28T09:48:43Z (UTC) · machine-readable: [VITALS.json](VITALS.json) · full history: [history.ndjson](history.ndjson) · daily snapshots: [snapshots/](snapshots/)_
+_Updated 2026-10-29T10:08:30Z (UTC) · machine-readable: [VITALS.json](VITALS.json) · full history: [history.ndjson](history.ndjson) · daily snapshots: [snapshots/](snapshots/)_
 
 | | |
 |---|---|
 | Repository created | 2026-02-17 |
-| Tracked by repo-vitals since | 2026-07-22 (99 days)³ |
+| Tracked by repo-vitals since | 2026-07-22 (100 days)³ |
 
 
 ## Summary
 
 | Metric | 30 d | 90 d | 365 d |
 |---|---:|---:|---:|
-| Views | 3 | 6 | 6 |
-| Unique visitors¹ | 2 | 5 | 5 |
-| Clones | 207 | 512 | 512 |
+| Views | 1 | 6 | 6 |
+| Unique visitors¹ | 1 | 5 | 5 |
+| Clones | 205 | 513 | 513 |
 | Stars gained | 0 | 0 | 1 |
 | Release downloads gained | 0 | 0 | 0 |
 
@@ -23,14 +23,14 @@ _Updated 2026-10-28T09:48:43Z (UTC) · machine-readable: [VITALS.json](VITALS.js
 
 ## Since tracking began
 
-Everything recorded so far, from 2026-07-22 (99 days) — the total, and the same total expressed as an average rate.
+Everything recorded so far, from 2026-07-22 (100 days) — the total, and the same total expressed as an average rate.
 
 | Metric | Total | Average / 30 d |
 |---|---:|---:|
 | Views | 6 | 1.8 |
 | Unique visitors¹ | 5 | 1.5 |
-| Clones | 512 | 155.2 |
-| Unique cloners¹ | 366 | 110.9 |
+| Clones | 513 | 153.9 |
+| Unique cloners¹ | 367 | 110.1 |
 | Stars gained | 1 | 0.3 |
 | Release downloads gained | 0 | 0.0 |
 
@@ -39,14 +39,14 @@ Averages are the total divided by days tracked, times 30 — not a projection.
 ## Trends — last 30 days
 
 ```
-views  █▁▁▁▁▁▅▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁·  (3 total)
-clones ▂▂▁▄▁▄▇▁▄▂▁▆▁▆▂▄▁▅▁▅▂▅▁▄█▁▇▃▁·  (207 total)
+views  ▁▁▁▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁·  (1 total)
+clones ▂▁▄▁▄▇▁▄▂▁▆▁▆▂▄▁▅▁▅▂▅▁▄█▁▇▃▁▁·  (205 total)
 ```
 
 ('·' = day without data)
 
 Stars: **1** (+0 in 30 d, +0 in 7 d)
-**Conversion funnel (30 d):** 2 unique visitors → 140 unique cloners → 0 stars gained → 0 downloads gained
+**Conversion funnel (30 d):** 1 unique visitors → 138 unique cloners → 0 stars gained → 0 downloads gained
 
 
 ## Releases
@@ -73,7 +73,7 @@ Interactive dashboard: [index.html](index.html) on this branch (raw URLs don't
 render HTML — view it via GitHub Pages on the vitals branch, the repo-vitals
 hub, or locally: `git clone -b vitals … && python -m http.server`).
 A copy of this report named with the repo and today's date lives at
-[reports/biterik-PyOri-2026-10-28.md](reports/biterik-PyOri-2026-10-28.md)
+[reports/biterik-PyOri-2026-10-29.md](reports/biterik-PyOri-2026-10-29.md)
 — safe to download standalone.
 
 <sub>[repo-vitals](https://github.com/biterik/repo-vitals) by Erik Bitzek —
